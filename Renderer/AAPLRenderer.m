@@ -86,46 +86,47 @@ Implementation of renderer class which performs Metal setup and per frame render
                       withBytes:image.data.bytes
                     bytesPerRow:bytesPerRow];
 
-		float left = 0, top = 0, right = image.width, bottom = image.height;
+		float startX = 0, startY = 50, endX = image.width, endY = image.height;
+		bool isMathematical = false;
 		
-		float flippedTop = image.height -top;
-		float flippedBottom = image.height -bottom;
+		float realStartY = isMathematical ? endY : (image.height -startY);
+		float realEndY = isMathematical ? startY : (image.height -endY);
 
-		float	halfWidth = (right - left) / 2.0;
-		float	halfHeight = (bottom - top) / 2.0;
+		float	halfWidth = (endX - startX) / 2.0;
+		float	halfHeight = (endY - startY) / 2.0;
 
         // Set up a simple MTLBuffer with our vertices which include texture coordinates
 		static AAPLVertex quadVertices[6];
 		
 		quadVertices[0].position[0] = halfWidth;
 		quadVertices[0].position[1] = -halfHeight;
-		quadVertices[0].textureCoordinate[0] = right / image.width;
-		quadVertices[0].textureCoordinate[1] = flippedBottom / image.height;
+		quadVertices[0].textureCoordinate[0] = endX / image.width;
+		quadVertices[0].textureCoordinate[1] = realEndY / image.height;
 
 		quadVertices[1].position[0] = -halfWidth;
 		quadVertices[1].position[1] = -halfHeight;
-		quadVertices[1].textureCoordinate[0] = left / image.width;
-		quadVertices[1].textureCoordinate[1] = flippedBottom / image.height;
+		quadVertices[1].textureCoordinate[0] = startX / image.width;
+		quadVertices[1].textureCoordinate[1] = realEndY / image.height;
 
 		quadVertices[2].position[0] = -halfWidth;
 		quadVertices[2].position[1] = halfHeight;
-		quadVertices[2].textureCoordinate[0] = left / image.width;
-		quadVertices[2].textureCoordinate[1] = flippedTop / image.height;
+		quadVertices[2].textureCoordinate[0] = startX / image.width;
+		quadVertices[2].textureCoordinate[1] = realStartY / image.height;
 
 		quadVertices[3].position[0] = halfWidth;
 		quadVertices[3].position[1] = -halfHeight;
-		quadVertices[3].textureCoordinate[0] = right / image.width;
-		quadVertices[3].textureCoordinate[1] = flippedBottom / image.height;
+		quadVertices[3].textureCoordinate[0] = endX / image.width;
+		quadVertices[3].textureCoordinate[1] = realEndY / image.height;
 
 		quadVertices[4].position[0] = -halfWidth;
 		quadVertices[4].position[1] = halfHeight;
-		quadVertices[4].textureCoordinate[0] = left / image.width;
-		quadVertices[4].textureCoordinate[1] = flippedTop / image.height;
+		quadVertices[4].textureCoordinate[0] = startX / image.width;
+		quadVertices[4].textureCoordinate[1] = realStartY / image.height;
 
 		quadVertices[5].position[0] = halfWidth;
 		quadVertices[5].position[1] = halfHeight;
-		quadVertices[5].textureCoordinate[0] = right / image.width;
-		quadVertices[5].textureCoordinate[1] = flippedTop / image.height;
+		quadVertices[5].textureCoordinate[0] = endX / image.width;
+		quadVertices[5].textureCoordinate[1] = realStartY / image.height;
 
         // Create our vertex buffer, and initialize it with our quadVertices array
         _vertices = [_device newBufferWithBytes:quadVertices
