@@ -38,7 +38,110 @@ Implementation of renderer class which performs Metal setup and per frame render
 
     // The current size of our view so we can use this in our render pipeline
     vector_uint2 _viewportSize;
+	
+	AAPLImage * _image;
+	
+	float _minX;
+	float _minY;
+	float _maxX;
+	float _maxY;
 }
+
+
+-(void) setVerticesWithMinX: (float)startX minY: (float)startY maxX: (float)endX maxY: (float)endY mathematical: (BOOL)notFlipped
+{
+	bool isMathematical = false;
+	
+	float realStartY = isMathematical ? endY : (_image.height -startY);
+	float realEndY = isMathematical ? startY : (_image.height -endY);
+	
+	float	halfWidth = (endX - startX) / 2.0;
+	float	halfHeight = (endY - startY) / 2.0;
+	
+	// Set up a simple MTLBuffer with our vertices which include texture coordinates
+	static AAPLVertex quadVertices[6];
+	
+	quadVertices[0].position[0] = halfWidth;
+	quadVertices[0].position[1] = -halfHeight;
+	quadVertices[0].textureCoordinate[0] = endX / _image.width;
+	quadVertices[0].textureCoordinate[1] = realEndY / _image.height;
+	
+	quadVertices[1].position[0] = -halfWidth;
+	quadVertices[1].position[1] = -halfHeight;
+	quadVertices[1].textureCoordinate[0] = startX / _image.width;
+	quadVertices[1].textureCoordinate[1] = realEndY / _image.height;
+	
+	quadVertices[2].position[0] = -halfWidth;
+	quadVertices[2].position[1] = halfHeight;
+	quadVertices[2].textureCoordinate[0] = startX / _image.width;
+	quadVertices[2].textureCoordinate[1] = realStartY / _image.height;
+	
+	quadVertices[3].position[0] = halfWidth;
+	quadVertices[3].position[1] = -halfHeight;
+	quadVertices[3].textureCoordinate[0] = endX / _image.width;
+	quadVertices[3].textureCoordinate[1] = realEndY / _image.height;
+	
+	quadVertices[4].position[0] = -halfWidth;
+	quadVertices[4].position[1] = halfHeight;
+	quadVertices[4].textureCoordinate[0] = startX / _image.width;
+	quadVertices[4].textureCoordinate[1] = realStartY / _image.height;
+	
+	quadVertices[5].position[0] = halfWidth;
+	quadVertices[5].position[1] = halfHeight;
+	quadVertices[5].textureCoordinate[0] = endX / _image.width;
+	quadVertices[5].textureCoordinate[1] = realStartY / _image.height;
+	
+	// Create our vertex buffer, and initialize it with our quadVertices array
+	_vertices = [_device newBufferWithBytes:quadVertices
+									 length:sizeof(quadVertices)
+									options:MTLResourceStorageModeShared];
+	
+	// Calculate the number of vertices by dividing the byte length by the size of each vertex
+	_numVertices = sizeof(quadVertices) / sizeof(AAPLVertex);
+}
+
+
+- (void)loadImage
+{
+	NSURL *imageFileLocation = [[NSBundle mainBundle] URLForResource:@"Image"
+													   withExtension:@"tga"];
+	
+	_image = [[AAPLImage alloc] initWithTGAFileAtLocation:imageFileLocation];
+	
+	if(!_image)
+	{
+		NSLog(@"Failed to create the image from %@", imageFileLocation.absoluteString);
+		return;
+	}
+	
+	MTLTextureDescriptor *textureDescriptor = [[MTLTextureDescriptor alloc] init];
+	
+	// Indicate that each pixel has a blue, green, red, and alpha channel, where each channel is
+	// an 8-bit unsigned normalized value (i.e. 0 maps to 0.0 and 255 maps to 1.0)
+	textureDescriptor.pixelFormat = MTLPixelFormatBGRA8Unorm;
+	
+	// Set the pixel dimensions of the texture
+	textureDescriptor.width = _image.width;
+	textureDescriptor.height = _image.height;
+	
+	// Create the texture from the device by using the descriptor
+	_texture = [_device newTextureWithDescriptor:textureDescriptor];
+	
+	// Calculate the number of bytes per row of our _image.
+	NSUInteger bytesPerRow = 4 * _image.width;
+	
+	MTLRegion region = {
+		{ 0, 0, 0 },                   // MTLOrigin
+		{_image.width, _image.height, 1} // MTLSize
+	};
+	
+	// Copy the bytes from our data object into the texture
+	[_texture replaceRegion:region
+				mipmapLevel:0
+				  withBytes:_image.data.bytes
+				bytesPerRow:bytesPerRow];
+}
+
 
 /// Initialize with the MetalKit view from which we'll obtain our Metal device
 - (nonnull instancetype)initWithMetalKitView:(nonnull MTKView *)mtkView
@@ -48,94 +151,13 @@ Implementation of renderer class which performs Metal setup and per frame render
     {
         _device = mtkView.device;
 
-        NSURL *imageFileLocation = [[NSBundle mainBundle] URLForResource:@"Image"
-                                                           withExtension:@"tga"];
-
-        AAPLImage * image = [[AAPLImage alloc] initWithTGAFileAtLocation:imageFileLocation];
-
-        if(!image)
-        {
-            NSLog(@"Failed to create the image from %@", imageFileLocation.absoluteString);
-            return nil;
-        }
-
-        MTLTextureDescriptor *textureDescriptor = [[MTLTextureDescriptor alloc] init];
-
-        // Indicate that each pixel has a blue, green, red, and alpha channel, where each channel is
-        // an 8-bit unsigned normalized value (i.e. 0 maps to 0.0 and 255 maps to 1.0)
-        textureDescriptor.pixelFormat = MTLPixelFormatBGRA8Unorm;
-
-         // Set the pixel dimensions of the texture
-        textureDescriptor.width = image.width;
-        textureDescriptor.height = image.height;
-
-        // Create the texture from the device by using the descriptor
-        _texture = [_device newTextureWithDescriptor:textureDescriptor];
-
-        // Calculate the number of bytes per row of our image.
-        NSUInteger bytesPerRow = 4 * image.width;
-
-        MTLRegion region = {
-            { 0, 0, 0 },                   // MTLOrigin
-            {image.width, image.height, 1} // MTLSize
-        };
-
-        // Copy the bytes from our data object into the texture
-        [_texture replaceRegion:region
-                    mipmapLevel:0
-                      withBytes:image.data.bytes
-                    bytesPerRow:bytesPerRow];
-
-		float startX = 0, startY = 50, endX = image.width, endY = image.height;
-		bool isMathematical = false;
+		[self loadImage];
 		
-		float realStartY = isMathematical ? endY : (image.height -startY);
-		float realEndY = isMathematical ? startY : (image.height -endY);
-
-		float	halfWidth = (endX - startX) / 2.0;
-		float	halfHeight = (endY - startY) / 2.0;
-
-        // Set up a simple MTLBuffer with our vertices which include texture coordinates
-		static AAPLVertex quadVertices[6];
+		_minX = 35;
+		_minY = 50;
+		_maxX = 544;
+		_maxY = 418;
 		
-		quadVertices[0].position[0] = halfWidth;
-		quadVertices[0].position[1] = -halfHeight;
-		quadVertices[0].textureCoordinate[0] = endX / image.width;
-		quadVertices[0].textureCoordinate[1] = realEndY / image.height;
-
-		quadVertices[1].position[0] = -halfWidth;
-		quadVertices[1].position[1] = -halfHeight;
-		quadVertices[1].textureCoordinate[0] = startX / image.width;
-		quadVertices[1].textureCoordinate[1] = realEndY / image.height;
-
-		quadVertices[2].position[0] = -halfWidth;
-		quadVertices[2].position[1] = halfHeight;
-		quadVertices[2].textureCoordinate[0] = startX / image.width;
-		quadVertices[2].textureCoordinate[1] = realStartY / image.height;
-
-		quadVertices[3].position[0] = halfWidth;
-		quadVertices[3].position[1] = -halfHeight;
-		quadVertices[3].textureCoordinate[0] = endX / image.width;
-		quadVertices[3].textureCoordinate[1] = realEndY / image.height;
-
-		quadVertices[4].position[0] = -halfWidth;
-		quadVertices[4].position[1] = halfHeight;
-		quadVertices[4].textureCoordinate[0] = startX / image.width;
-		quadVertices[4].textureCoordinate[1] = realStartY / image.height;
-
-		quadVertices[5].position[0] = halfWidth;
-		quadVertices[5].position[1] = halfHeight;
-		quadVertices[5].textureCoordinate[0] = endX / image.width;
-		quadVertices[5].textureCoordinate[1] = realStartY / image.height;
-
-        // Create our vertex buffer, and initialize it with our quadVertices array
-        _vertices = [_device newBufferWithBytes:quadVertices
-                                         length:sizeof(quadVertices)
-                                        options:MTLResourceStorageModeShared];
-
-        // Calculate the number of vertices by dividing the byte length by the size of each vertex
-        _numVertices = sizeof(quadVertices) / sizeof(AAPLVertex);
-
         /// Create our render pipeline
 
         // Load all the shader files with a .metal file extension in the project
@@ -168,6 +190,16 @@ Implementation of renderer class which performs Metal setup and per frame render
 
         // Create the command queue
         _commandQueue = [_device newCommandQueue];
+		
+		[NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block:^(NSTimer * _Nonnull timer) {
+			[self setVerticesWithMinX: self->_minX minY: self->_minY maxX: self->_maxX maxY: self->_maxY mathematical:NO];
+			self->_minX += 5;
+			if (self->_minX >= self->_maxX) {
+				self->_minX = 0;
+			}
+		}];
+		
+		[self setVerticesWithMinX: _minX minY: _minY maxX: _maxX maxY: _maxY mathematical:NO];
     }
 
     return self;
